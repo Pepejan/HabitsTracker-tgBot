@@ -10,13 +10,18 @@ def setup_habits(service: HabitService):
         habit = callback.data.split(":")[1]
         user_id = callback.from_user.id
 
-        done = service.mark_habit(user_id, habit)
-        text = ", ".join(done)
-
+        done, added = service.mark_habit(user_id, habit)
         habits = service.get_all_habits(user_id)
 
+        text = ", ".join(done) if done else "Nothing yet"
+
+        if added:
+            msg = f"✅ Marked as done: {habit}\nToday: {text}"
+        else:
+            msg = f"⚠ You already marked '{habit}' today!\nToday: {text}"
+
         await callback.message.edit_text(
-            f"Today: {text}",
+            msg,
             reply_markup=habits_keyboard(habits)
         )
         await callback.answer()

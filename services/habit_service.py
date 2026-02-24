@@ -10,10 +10,14 @@ class HabitService:
         today = str(date.today())
         today_habits = self.db.get_today(user_id, today)
 
-        if habit not in today_habits:
-            self.db.add_habit(user_id, habit, today)
+        if habit in today_habits:
+            # Already marked, just return current list
+            return today_habits, False  # False means it was already done
 
-        return self.db.get_today(user_id, today)
+        # Otherwise, add habit
+        self.db.add_habit(user_id, habit, today)
+        today_habits = self.db.get_today(user_id, today)
+        return today_habits, True  # True means added successfully
 
     def get_stats(self, user_id):
         return self.db.get_last_days(user_id)
