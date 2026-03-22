@@ -6,7 +6,7 @@ router = Router()
 @router.message(Command("help"))
 async def help_command(message: types.Message):
     text = (
-        "📘 <b>Habit Tracker — Help</b>\n"
+        "📘 <b>Тобі вже нічого не поможе — Help</b>\n"
         "━━━━━━━━━━━━━━━━\n\n"
         "🗂 <b>Commands</b>\n\n"
         "/start — Open habit tracker & mark habits\n"
