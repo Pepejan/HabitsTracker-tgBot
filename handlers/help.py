@@ -5,24 +5,27 @@ router = Router()
 
 @router.message(Command("help"))
 async def help_command(message: types.Message):
-    text = """
-📘 Habit Tracker Bot Help
-
-Commands:
-
-/start — Show habits and mark completed
-/stats — Show recent activity
-/add <habit> — Create your own habit
-/myhabits — Show all your habits
-/help — Show this guide
-
-Examples:
-/add Meditation
-/add No sugar
-
-How it works:
-• Tap a habit to mark it done today
-• You can create unlimited custom habits
-• Your progress is saved automatically
-"""
-    await message.answer(text)
+    text = (
+        "📘 <b>Habit Tracker — Help</b>\n"
+        "━━━━━━━━━━━━━━━━\n\n"
+        "🗂 <b>Commands</b>\n\n"
+        "/start — Open habit tracker & mark habits\n"
+        "/stats — View recent activity (last 7 days)\n"
+        "/week — 📊 Weekly chart summary\n"
+        "/add &lt;habit&gt; — Create a custom habit\n"
+        "/myhabits — List all your habits\n"
+        "/remove — 🗑️ Delete a custom habit\n"
+        "/help — Show this guide\n\n"
+        "━━━━━━━━━━━━━━━━\n"
+        "💡 <b>Tips</b>\n\n"
+        "• Tap any habit in /start to mark it ✅\n"
+        "• You can add unlimited custom habits\n"
+        "• Your streak builds when you're consistent\n"
+        "• Check /week every Sunday to review progress\n\n"
+        "━━━━━━━━━━━━━━━━\n"
+        "📦 <b>Examples</b>\n\n"
+        "<code>/add Meditation</code>\n"
+        "<code>/add No sugar</code>\n"
+        "<code>/add Cold shower</code>"
+    )
+    await message.answer(text, parse_mode="HTML")

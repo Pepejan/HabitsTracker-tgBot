@@ -1,14 +1,17 @@
-# database.py
 import sqlite3
 
 class Database:
-    def __init__(self, path="habits.db"):
+    def __init__(self, path=None):
+        import os
+        if path is None:
+            from config import Config
+            path = Config.DB_PATH
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         self.conn = sqlite3.connect(path)
         self.cursor = self.conn.cursor()
         self.create_tables()
 
     def create_tables(self):
-        # Table for tracking completed habits per day
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS habits (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17,8 +20,6 @@ class Database:
             day TEXT
         )
         """)
-
-        # Table for storing user custom habits
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_habits (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,10 +27,9 @@ class Database:
             habit TEXT
         )
         """)
-
         self.conn.commit()
 
-    # ======== HABITS (daily completions) ========
+    # ── HABITS (daily completions) ───────────────────────────
     def add_habit(self, user_id: int, habit: str, day: str):
         self.cursor.execute(
             "INSERT INTO habits (user_id, habit, day) VALUES (?, ?, ?)",
@@ -38,7 +38,6 @@ class Database:
         self.conn.commit()
 
     def get_today(self, user_id: int, day: str):
-        """Return list of habits completed today by user"""
         self.cursor.execute(
             "SELECT habit FROM habits WHERE user_id=? AND day=?",
             (user_id, day)
@@ -46,16 +45,14 @@ class Database:
         return [row[0] for row in self.cursor.fetchall()]
 
     def get_last_days(self, user_id: int, limit: int = 30):
-        """Return last `limit` habit records"""
         self.cursor.execute(
             "SELECT day, habit FROM habits WHERE user_id=? ORDER BY day DESC LIMIT ?",
             (user_id, limit)
         )
         return self.cursor.fetchall()
 
-    # ======== USER CUSTOM HABITS ========
+    # ── USER CUSTOM HABITS ───────────────────────────────────
     def add_user_habit(self, user_id: int, habit: str):
-        """Add a custom habit for a user"""
         self.cursor.execute(
             "INSERT INTO user_habits (user_id, habit) VALUES (?, ?)",
             (user_id, habit)
@@ -63,9 +60,25 @@ class Database:
         self.conn.commit()
 
     def get_user_habits(self, user_id: int):
-        """Return list of custom habits for a user"""
         self.cursor.execute(
             "SELECT habit FROM user_habits WHERE user_id=?",
             (user_id,)
+        )
+        return [row[0] for row in self.cursor.fetchall()]
+
+    def delete_user_habit(self, user_id: int, habit: str):
+        self.cursor.execute(
+            "DELETE FROM user_habits WHERE user_id=? AND habit=?",
+            (user_id, habit)
+        )
+        self.conn.commit()
+
+    # ── USERS ────────────────────────────────────────────────
+    def get_all_user_ids(self) -> list[int]:
+        """Return all unique user IDs that have ever used the bot"""
+        self.cursor.execute(
+            "SELECT DISTINCT user_id FROM habits "
+            "UNION "
+            "SELECT DISTINCT user_id FROM user_habits"
         )
         return [row[0] for row in self.cursor.fetchall()]
