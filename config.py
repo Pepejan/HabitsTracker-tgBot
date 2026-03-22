@@ -1,5 +1,11 @@
 import os
 
+
 class Config:
-    BOT_TOKEN = os.getenv("BOT_TOKEN")
-    DB_PATH = os.getenv("DB_PATH", "data/habits.db")
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
+    DB_PATH: str = os.getenv("DB_PATH", "data/habits.db")
+
+    @classmethod
+    def validate(cls) -> None:
+        if not cls.BOT_TOKEN:
+            raise EnvironmentError("BOT_TOKEN environment variable is not set.")

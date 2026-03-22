@@ -1,46 +1,71 @@
+"""
+services/habit_service.py
+
+HabitService  owns all business logic.
+It talks to Database repositories, never to raw SQL.
+"""
+
 from datetime import date
+from database import Database
+
 
 class HabitService:
-    DEFAULT_HABITS = ["Water", "Exercise", "Read"]
+    DEFAULT_HABITS: list[str] = ["Water", "Exercise", "Read"]
 
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, db: Database) -> None:
+        self._db = db
 
-    def get_all_habits(self, user_id: int) -> list:
-        user_habits = self.db.get_user_habits(user_id)
-        return self.DEFAULT_HABITS + user_habits
+    # ── habit catalogue ───────────────────────────────────────
 
-    def _filter_active(self, user_id: int, completions: list) -> list:
-        """Strip completions for habits that no longer exist"""
-        active = self.get_all_habits(user_id)
+    def get_all_habits(self, user_id: int) -> list[str]:
+        return self.DEFAULT_HABITS + self._db.user_habits.get_all(user_id)
+
+    def get_custom_habits(self, user_id: int) -> list[str]:
+        return self._db.user_habits.get_all(user_id)
+
+    def habit_exists(self, user_id: int, habit: str) -> bool:
+        """True if the habit name is already in the user's list (case-insensitive)."""
+        existing = [h.lower() for h in self.get_all_habits(user_id)]
+        return habit.lower() in existing
+
+    def create_habit(self, user_id: int, habit: str) -> None:
+        self._db.user_habits.add(user_id, habit)
+
+    def delete_habit(self, user_id: int, habit: str) -> None:
+        self._db.user_habits.delete(user_id, habit)
+
+    # ── daily tracking ────────────────────────────────────────
+
+    def mark_habit(self, user_id: int, habit: str) -> tuple[list[str], bool]:
+        """
+        Mark a habit as done for today.
+        Returns (done_list, was_added).
+        was_added is False if already marked today.
+        """
+        today = self._today()
+        done = self._db.habits.get_by_day(user_id, today)
+
+        if habit in done:
+            return self._filter_active(user_id, done), False
+
+        self._db.habits.add(user_id, habit, today)
+        done = self._db.habits.get_by_day(user_id, today)
+        return self._filter_active(user_id, done), True
+
+    def get_done_today(self, user_id: int) -> list[str]:
+        """Today's completions filtered to only currently-active habits."""
+        done = self._db.habits.get_by_day(user_id, self._today())
+        return self._filter_active(user_id, done)
+
+    def get_stats(self, user_id: int) -> list[tuple[str, str]]:
+        return self._db.habits.get_recent(user_id)
+
+    # ── helpers ───────────────────────────────────────────────
+
+    @staticmethod
+    def _today() -> str:
+        return str(date.today())
+
+    def _filter_active(self, user_id: int, completions: list[str]) -> list[str]:
+        active = set(self.get_all_habits(user_id))
         return [h for h in completions if h in active]
-
-    def mark_habit(self, user_id: int, habit: str):
-        today = str(date.today())
-        today_habits = self.db.get_today(user_id, today)
-
-        if habit in today_habits:
-            return self._filter_active(user_id, today_habits), False
-
-        self.db.add_habit(user_id, habit, today)
-        today_habits = self.db.get_today(user_id, today)
-        return self._filter_active(user_id, today_habits), True
-
-    def get_done_today(self, user_id: int) -> list:
-        """Return today's completions filtered to only active habits.
-        Prevents done_count > total when habits are deleted mid-day."""
-        today = str(date.today())
-        return self._filter_active(user_id, self.db.get_today(user_id, today))
-
-    def get_stats(self, user_id: int):
-        return self.db.get_last_days(user_id)
-
-    def create_habit(self, user_id: int, habit: str):
-        self.db.add_user_habit(user_id, habit)
-
-    def get_custom_habits(self, user_id: int) -> list:
-        """Return only user-created habits (not defaults)"""
-        return self.db.get_user_habits(user_id)
-
-    def delete_habit(self, user_id: int, habit: str):
-        self.db.delete_user_habit(user_id, habit)

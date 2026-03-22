@@ -1,4 +1,12 @@
+"""
+bot.py  —  Application entry point
+
+Wires together the Database, HabitService, all handlers, and the scheduler.
+No business logic lives here — only composition.
+"""
+
 import asyncio
+
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
@@ -7,39 +15,37 @@ from database import Database
 from services.habit_service import HabitService
 from scheduler import HabitScheduler
 
-from handlers.start import router as start_router, setup_start
-from handlers.habits import router as habits_router, setup_habits
-from handlers.stats import router as stats_router, setup_stats
-from handlers.custom import router as custom_router, setup_custom
-from handlers.week import router as week_router, setup_week
-from handlers.remove import router as remove_router, setup_remove
-from handlers.help import router as help_router
+from handlers.start import StartHandler
+from handlers.habits import HabitsHandler
+from handlers.stats import StatsHandler
+from handlers.custom import CustomHabitHandler
+from handlers.week import WeekHandler
+from handlers.remove import RemoveHandler
+from handlers.help import HelpHandler
 
 
-async def main():
+async def main() -> None:
+    Config.validate()
+
     bot = Bot(token=Config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
 
     db = Database()
     service = HabitService(db)
 
-    # Setup handlers
-    setup_start(service)
-    setup_habits(service)
-    setup_stats(service)
-    setup_custom(service)
-    setup_week(service)
-    setup_remove(service)
+    # Instantiate all handlers — each owns its own Router
+    handlers = [
+        StartHandler(service),
+        HabitsHandler(service),
+        StatsHandler(service),
+        CustomHabitHandler(service),
+        WeekHandler(service),
+        RemoveHandler(service),
+        HelpHandler(),          # no service dependency
+    ]
+    for h in handlers:
+        dp.include_router(h.router)
 
-    dp.include_router(start_router)
-    dp.include_router(habits_router)
-    dp.include_router(stats_router)
-    dp.include_router(custom_router)
-    dp.include_router(week_router)
-    dp.include_router(remove_router)
-    dp.include_router(help_router)
-
-    # Start daily 09:00 reminder scheduler
     scheduler = HabitScheduler(bot, db)
     scheduler.start()
 
