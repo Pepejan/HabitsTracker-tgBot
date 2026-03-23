@@ -24,6 +24,7 @@ from handlers.remove import RemoveHandler
 from handlers.help import HelpHandler
 
 from handlers.export import ExportHandler
+from handlers.import_handler import ImportHandler
 
 async def main() -> None:
     Config.validate()
@@ -44,6 +45,7 @@ async def main() -> None:
         RemoveHandler(service),
         HelpHandler(),
         ExportHandler(service),
+        ImportHandler(service),
     ]
     for h in handlers:
         dp.include_router(h.router)

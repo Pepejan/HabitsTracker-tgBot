@@ -64,17 +64,6 @@ class HabitService:
     # ── export ────────────────────────────────────────────────
 
     def export_user_data(self, user_id: int) -> dict:
-        """
-        Returns a dict ready to be serialised as JSON:
-        {
-            "exported_at": "2024-03-23T09:00:00",
-            "custom_habits": ["💧 Water", ...],
-            "completions": [
-                {"day": "2024-03-23", "habit": "💧 Water"},
-                ...
-            ]
-        }
-        """
         from datetime import datetime
 
         custom_habits = self._db.user_habits.get_all(user_id)
@@ -87,6 +76,46 @@ class HabitService:
                 {"day": day, "habit": habit}
                 for day, habit in raw_completions
             ],
+        }
+
+    # ── import ────────────────────────────────────────────────
+
+    async def import_user_data(self, user_id: int, data: dict) -> dict:
+        """
+        Restores custom habits and completion records from an export dict.
+        Returns a summary of what was added vs skipped.
+        """
+        habits_added = 0
+        habits_skipped = 0
+        completions_added = 0
+        completions_skipped = 0
+
+        # Restore custom habits (skip duplicates)
+        for habit in data.get("custom_habits", []):
+            if self._db.user_habits.exists(user_id, habit):
+                habits_skipped += 1
+            else:
+                self._db.user_habits.add(user_id, habit)
+                habits_added += 1
+
+        # Restore completions (skip exact day+habit duplicates)
+        for entry in data.get("completions", []):
+            day = entry.get("day")
+            habit = entry.get("habit")
+            if not day or not habit:
+                continue
+            existing = self._db.habits.get_by_day(user_id, day)
+            if habit in existing:
+                completions_skipped += 1
+            else:
+                self._db.habits.add(user_id, habit, day)
+                completions_added += 1
+
+        return {
+            "habits_added": habits_added,
+            "habits_skipped": habits_skipped,
+            "completions_added": completions_added,
+            "completions_skipped": completions_skipped,
         }
 
     # ── helpers ───────────────────────────────────────────────
