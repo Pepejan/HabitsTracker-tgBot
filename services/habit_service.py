@@ -24,16 +24,12 @@ class HabitService:
         return self._db.user_habits.get_all(user_id)
 
     def habit_exists(self, user_id: int, habit: str) -> bool:
-        """True if the habit name is already in the user's list (case-insensitive).
-        Strips leading emoji/symbol characters before comparing so that
-        '📖 Reading' and '🎯 Reading' are treated as the same habit."""
         needle = self._strip_emoji(habit).lower()
         existing = [self._strip_emoji(h).lower() for h in self.get_all_habits(user_id)]
         return needle in existing
 
     @staticmethod
     def _strip_emoji(text: str) -> str:
-        """Remove a leading non-ASCII word (emoji) and surrounding whitespace."""
         parts = text.strip().split(None, 1)
         if len(parts) == 2 and not parts[0].isascii():
             return parts[1].strip()
@@ -48,11 +44,6 @@ class HabitService:
     # ── daily tracking ────────────────────────────────────────
 
     def mark_habit(self, user_id: int, habit: str) -> tuple[list[str], bool]:
-        """
-        Mark a habit as done for today.
-        Returns (done_list, was_added).
-        was_added is False if already marked today.
-        """
         today = self._today()
         done = self._db.habits.get_by_day(user_id, today)
 
@@ -64,12 +55,39 @@ class HabitService:
         return self._filter_active(user_id, done), True
 
     def get_done_today(self, user_id: int) -> list[str]:
-        """Today's completions filtered to only currently-active habits."""
         done = self._db.habits.get_by_day(user_id, self._today())
         return self._filter_active(user_id, done)
 
     def get_stats(self, user_id: int) -> list[tuple[str, str]]:
         return self._db.habits.get_recent(user_id)
+
+    # ── export ────────────────────────────────────────────────
+
+    def export_user_data(self, user_id: int) -> dict:
+        """
+        Returns a dict ready to be serialised as JSON:
+        {
+            "exported_at": "2024-03-23T09:00:00",
+            "custom_habits": ["💧 Water", ...],
+            "completions": [
+                {"day": "2024-03-23", "habit": "💧 Water"},
+                ...
+            ]
+        }
+        """
+        from datetime import datetime
+
+        custom_habits = self._db.user_habits.get_all(user_id)
+        raw_completions = self._db.habits.get_recent(user_id, limit=10_000)
+
+        return {
+            "exported_at": datetime.now().isoformat(timespec="seconds"),
+            "custom_habits": custom_habits,
+            "completions": [
+                {"day": day, "habit": habit}
+                for day, habit in raw_completions
+            ],
+        }
 
     # ── helpers ───────────────────────────────────────────────
 

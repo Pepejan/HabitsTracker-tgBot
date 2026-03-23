@@ -23,6 +23,7 @@ from handlers.week import WeekHandler
 from handlers.remove import RemoveHandler
 from handlers.help import HelpHandler
 
+from handlers.export import ExportHandler
 
 async def main() -> None:
     Config.validate()
@@ -41,7 +42,8 @@ async def main() -> None:
         CustomHabitHandler(service),
         WeekHandler(service),
         RemoveHandler(service),
-        HelpHandler(),          # no service dependency
+        HelpHandler(),
+        ExportHandler(service),
     ]
     for h in handlers:
         dp.include_router(h.router)
