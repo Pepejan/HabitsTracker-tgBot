@@ -31,7 +31,7 @@ class StartHandler:
         name = message.from_user.first_name or "there"
 
         await message.answer(
-            f"👋 Hey, <b>{name}</b>!\n\n"
+            f"👋 Пусі, <b>{name}</b>!\n\n"
             f"📅 <b>{date.today().strftime('%A, %b %d')}</b>\n"
             f"📊 Progress: <b>{bar}</b>  {done_count}/{total}\n\n"
             f"Tap a habit to mark it done 👇",

@@ -24,9 +24,20 @@ class HabitService:
         return self._db.user_habits.get_all(user_id)
 
     def habit_exists(self, user_id: int, habit: str) -> bool:
-        """True if the habit name is already in the user's list (case-insensitive)."""
-        existing = [h.lower() for h in self.get_all_habits(user_id)]
-        return habit.lower() in existing
+        """True if the habit name is already in the user's list (case-insensitive).
+        Strips leading emoji/symbol characters before comparing so that
+        '📖 Reading' and '🎯 Reading' are treated as the same habit."""
+        needle = self._strip_emoji(habit).lower()
+        existing = [self._strip_emoji(h).lower() for h in self.get_all_habits(user_id)]
+        return needle in existing
+
+    @staticmethod
+    def _strip_emoji(text: str) -> str:
+        """Remove a leading non-ASCII word (emoji) and surrounding whitespace."""
+        parts = text.strip().split(None, 1)
+        if len(parts) == 2 and not parts[0].isascii():
+            return parts[1].strip()
+        return text.strip()
 
     def create_habit(self, user_id: int, habit: str) -> None:
         self._db.user_habits.add(user_id, habit)
