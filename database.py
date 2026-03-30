@@ -1,9 +1,11 @@
 """
 database.py  —  Repository layer
 
-Two focused repositories instead of one God-class:
-  • HabitRepository   — daily completion records
-  • UserHabitRepository — user-defined (custom) habits
+Four focused repositories:
+  • HabitRepository             — daily completion records
+  • UserHabitRepository         — user-defined (custom) habits
+  • UserPrefsRepository         — per-user preferences (language, etc.)
+  • DisabledDefaultsRepository  — tracks which built-in habits a user has hidden
 """
 
 import os
@@ -12,7 +14,7 @@ from typing import Optional
 
 
 class _BaseRepository:
-    """Shared connection — both repos talk to the same SQLite file."""
+    """Shared connection — all repos talk to the same SQLite file."""
 
     _conn: Optional[sqlite3.Connection] = None
 
@@ -130,6 +132,90 @@ class UserHabitRepository(_BaseRepository):
         return [row[0] for row in self._cursor.fetchall()]
 
 
+class UserPrefsRepository(_BaseRepository):
+    """Stores per-user preferences such as language."""
+
+    def __init__(self, path: str) -> None:
+        super().__init__(path)
+        self._create_table()
+
+    def _create_table(self) -> None:
+        self._cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_prefs (
+                user_id  INTEGER PRIMARY KEY,
+                language TEXT    NOT NULL DEFAULT 'en'
+            )
+        """)
+        self._commit()
+
+    def get_language(self, user_id: int) -> str:
+        self._cursor.execute(
+            "SELECT language FROM user_prefs WHERE user_id = ?",
+            (user_id,),
+        )
+        row = self._cursor.fetchone()
+        return row[0] if row else "en"
+
+    def set_language(self, user_id: int, language: str) -> None:
+        self._cursor.execute(
+            """
+            INSERT INTO user_prefs (user_id, language) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET language = excluded.language
+            """,
+            (user_id, language),
+        )
+        self._commit()
+
+
+class DisabledDefaultsRepository(_BaseRepository):
+    """
+    Tracks which built-in (default) habits a user has hidden.
+    Stores canonical English keys only (e.g. "Water", "Exercise", "Read").
+    """
+
+    def __init__(self, path: str) -> None:
+        super().__init__(path)
+        self._create_table()
+
+    def _create_table(self) -> None:
+        self._cursor.execute("""
+            CREATE TABLE IF NOT EXISTS disabled_defaults (
+                user_id INTEGER NOT NULL,
+                habit   TEXT    NOT NULL,
+                PRIMARY KEY (user_id, habit)
+            )
+        """)
+        self._commit()
+
+    def disable(self, user_id: int, habit: str) -> None:
+        self._cursor.execute(
+            "INSERT OR IGNORE INTO disabled_defaults (user_id, habit) VALUES (?, ?)",
+            (user_id, habit),
+        )
+        self._commit()
+
+    def enable(self, user_id: int, habit: str) -> None:
+        self._cursor.execute(
+            "DELETE FROM disabled_defaults WHERE user_id = ? AND habit = ?",
+            (user_id, habit),
+        )
+        self._commit()
+
+    def is_disabled(self, user_id: int, habit: str) -> bool:
+        self._cursor.execute(
+            "SELECT 1 FROM disabled_defaults WHERE user_id = ? AND habit = ?",
+            (user_id, habit),
+        )
+        return self._cursor.fetchone() is not None
+
+    def get_all_disabled(self, user_id: int) -> list[str]:
+        self._cursor.execute(
+            "SELECT habit FROM disabled_defaults WHERE user_id = ?",
+            (user_id,),
+        )
+        return [row[0] for row in self._cursor.fetchall()]
+
+
 # ── Convenience factory ───────────────────────────────────────
 
 class Database:
@@ -143,6 +229,8 @@ class Database:
         db_path = path or Config.DB_PATH
         self.habits = HabitRepository(db_path)
         self.user_habits = UserHabitRepository(db_path)
+        self.user_prefs = UserPrefsRepository(db_path)
+        self.disabled_defaults = DisabledDefaultsRepository(db_path)
 
     def get_all_user_ids(self) -> list[int]:
         ids = set(self.habits.get_all_user_ids())

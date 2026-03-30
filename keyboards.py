@@ -3,6 +3,9 @@ keyboards.py  —  UI building blocks
 
 KeyboardBuilder  encapsulates all keyboard construction.
 EmojiRegistry    owns the habit→emoji mapping.
+
+Button label strings are passed in from the caller so keyboards
+are fully localised without keyboards.py importing locales directly.
 """
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -12,16 +15,21 @@ class EmojiRegistry:
     """Maps habit keywords to display emojis."""
 
     _MAP: dict[str, str] = {
-        "water":     "💧",
-        "exercise":  "🏃",
-        "read":      "📖",
-        "meditation":"🧘",
-        "meditate":  "🧘",
-        "sleep":     "😴",
-        "diet":      "🥗",
-        "no sugar":  "🚫🍬",
-        "walk":      "🚶",
-        "journal":   "📝",
+        # English canonical keys
+        "water":      "💧",
+        "exercise":   "🏃",
+        "read":       "📖",
+        "meditation": "🧘",
+        "meditate":   "🧘",
+        "sleep":      "😴",
+        "diet":       "🥗",
+        "no sugar":   "🚫🍬",
+        "walk":       "🚶",
+        "journal":    "📝",
+        # Ukrainian default habit display names
+        "вода":       "💧",
+        "вправи":     "🏃",
+        "читання":    "📖",
     }
     _DEFAULT = "⭐"
 
@@ -66,7 +74,19 @@ class KeyboardBuilder:
         return InlineKeyboardMarkup(inline_keyboard=buttons)
 
     @classmethod
-    def emoji_picker(cls, habit_name: str) -> InlineKeyboardMarkup:
+    def emoji_picker(cls, habit_name: str, strings: dict | None = None) -> InlineKeyboardMarkup:
+        """
+        strings: localised string dict (needs "btn_auto_detect" key).
+        Falls back to English text if not provided.
+        """
+        auto_label = (
+            strings["btn_auto_detect"].format(
+                emoji=EmojiRegistry.get(habit_name), habit=habit_name
+            )
+            if strings
+            else f"✨ Auto-detect  ({EmojiRegistry.get(habit_name)} {habit_name})"
+        )
+
         buttons = []
         for category, emojis in cls._EMOJI_CATEGORIES.items():
             buttons.append([
@@ -79,29 +99,65 @@ class KeyboardBuilder:
                 InlineKeyboardButton(text=e, callback_data=f"pick_emoji:{e}")
                 for e in emojis
             ])
-        auto = EmojiRegistry.get(habit_name)
         buttons.append([
-            InlineKeyboardButton(
-                text=f"✨ Auto-detect  ({auto} {habit_name})",
-                callback_data=f"pick_emoji:{auto}",
-            )
+            InlineKeyboardButton(text=auto_label, callback_data=f"pick_emoji:{EmojiRegistry.get(habit_name)}")
         ])
         return InlineKeyboardMarkup(inline_keyboard=buttons)
 
     @classmethod
-    def remove_list(cls, habits: list[str]) -> InlineKeyboardMarkup:
+    def remove_list(cls, habits: list[str], strings: dict | None = None) -> InlineKeyboardMarkup:
+        cancel_label = strings["btn_cancel"] if strings else "✖️ Cancel"
         buttons = [
             [InlineKeyboardButton(text=f"🗑️  {h}", callback_data=f"remove_ask:{h}")]
             for h in habits
         ]
         buttons.append([
-            InlineKeyboardButton(text="✖️ Cancel", callback_data="remove_cancel")
+            InlineKeyboardButton(text=cancel_label, callback_data="remove_cancel")
         ])
         return InlineKeyboardMarkup(inline_keyboard=buttons)
 
     @classmethod
-    def remove_confirm(cls, habit: str) -> InlineKeyboardMarkup:
+    def remove_list_full(
+        cls,
+        default_habits: list[str],
+        custom_habits: list[str],
+        strings: dict | None = None,
+    ) -> InlineKeyboardMarkup:
+        """
+        Shows default habits (with a built-in badge) and custom habits
+        in a single list, each routing to remove_ask:<habit>.
+        """
+        cancel_label   = strings["btn_cancel"]          if strings else "✖️ Cancel"
+        built_in_badge = strings["btn_built_in_badge"]  if strings else "🔒"
+        buttons = []
+        for h in default_habits:
+            buttons.append([InlineKeyboardButton(
+                text=f"🗑️  {h}  {built_in_badge}",
+                callback_data=f"remove_ask:{h}",
+            )])
+        for h in custom_habits:
+            buttons.append([InlineKeyboardButton(
+                text=f"🗑️  {h}",
+                callback_data=f"remove_ask:{h}",
+            )])
+        buttons.append([InlineKeyboardButton(text=cancel_label, callback_data="remove_cancel")])
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    @classmethod
+    def remove_confirm(cls, habit: str, strings: dict | None = None) -> InlineKeyboardMarkup:
+        yes_label  = strings["btn_yes_delete"] if strings else "✅ Yes, delete"
+        back_label = strings["btn_go_back"]    if strings else "↩️ Go back"
         return InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="✅ Yes, delete", callback_data=f"remove_confirm:{habit}"),
-            InlineKeyboardButton(text="↩️ Go back",     callback_data="remove_back"),
+            InlineKeyboardButton(text=yes_label,  callback_data=f"remove_confirm:{habit}"),
+            InlineKeyboardButton(text=back_label, callback_data="remove_back"),
+        ]])
+
+    @classmethod
+    def remove_confirm_full(cls, confirm_callback: str, strings: dict | None = None) -> InlineKeyboardMarkup:
+        """Confirm keyboard where the yes-button callback is provided by the caller."""
+        yes_label  = strings["btn_yes_delete"] if strings else "✅ Yes, delete"
+        back_label = strings["btn_go_back"]    if strings else "↩️ Go back"
+        return InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text=yes_label,  callback_data=confirm_callback),
+            InlineKeyboardButton(text=back_label, callback_data="remove_back"),
         ]])

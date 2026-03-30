@@ -1,10 +1,4 @@
-"""
-handlers/export.py  —  /export command handler (admin-only)
-
-Protected by a password defined in Config.EXPORT_PASSWORD.
-Usage: /export <password>
-Not listed in /help intentionally.
-"""
+"""handlers/export.py  —  /export command handler (admin-only)"""
 
 import json
 from datetime import datetime
@@ -33,23 +27,19 @@ class ExportHandler:
         if not password or password != Config.EXPORT_PASSWORD:
             return
 
-        # Delete the message so the password isn't visible in chat
         try:
             await message.delete()
         except Exception:
             pass
 
         user_id = message.from_user.id
+        s = self._service.get_strings(user_id)
 
         try:
             data = self._service.export_user_data(user_id)
 
             if not data["custom_habits"] and not data["completions"]:
-                await message.bot.send_message(
-                    chat_id,
-                    "📭 <b>Nothing to export yet.</b>",
-                    parse_mode="HTML",
-                )
+                await message.bot.send_message(chat_id, s["export_empty"], parse_mode="HTML")
                 return
 
             json_bytes = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
@@ -59,16 +49,15 @@ class ExportHandler:
             await message.bot.send_document(
                 chat_id=chat_id,
                 document=BufferedInputFile(json_bytes, filename=filename),
-                caption=(
-                    "📦 <b>Habit data export</b>\n\n"
-                    f"✅ Custom habits: <b>{len(data['custom_habits'])}</b>\n"
-                    f"📅 Completion records: <b>{len(data['completions'])}</b>"
+                caption=s["export_caption"].format(
+                    habits=len(data["custom_habits"]),
+                    completions=len(data["completions"]),
                 ),
                 parse_mode="HTML",
             )
         except Exception as e:
             await message.bot.send_message(
                 chat_id,
-                f"❌ Export failed: <code>{e}</code>",
+                s["export_failed"].format(error=e),
                 parse_mode="HTML",
             )

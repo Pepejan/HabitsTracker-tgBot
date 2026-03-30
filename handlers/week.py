@@ -1,6 +1,4 @@
-"""
-handlers/week.py  —  /week summary handler (class-based)
-"""
+"""handlers/week.py  —  /week summary handler (class-based)"""
 
 from collections import defaultdict
 from datetime import date, timedelta
@@ -29,6 +27,7 @@ class WeekHandler:
 
     async def week_summary(self, message: types.Message) -> None:
         user_id = message.from_user.id
+        s = self._service.get_strings(user_id)
         rows = self._service.get_stats(user_id)
 
         by_day: dict[str, int] = defaultdict(int)
@@ -42,20 +41,21 @@ class WeekHandler:
         total_week = sum(counts)
 
         if total_week == 0:
-            await message.answer(
-                "📭 <b>No data for this week yet!</b>\n\nStart tracking habits with /start",
-                parse_mode="HTML",
-            )
+            await message.answer(s["week_empty"], parse_mode="HTML")
             return
 
         best_idx = counts.index(max(counts)) if max_count > 0 else None
         day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-        text = "📊 <b>Weekly Summary</b>\n━━━━━━━━━━━━━━━━\n\n"
+        text = s["week_header"]
         for i, (d, count) in enumerate(zip(week_days, counts)):
             label = day_labels[d.weekday()]
             bar = self._build_bar(count, max_count)
-            badge = (" ← today" if d == today else " 🏆" if i == best_idx and count > 0 else "")
+            badge = (
+                s["week_today"] if d == today
+                else s["week_best"] if i == best_idx and count > 0
+                else ""
+            )
             day_str = f"<b>{label}</b>" if d == today else label
             text += f"{day_str}  {bar}  {count}{badge}\n"
 
@@ -63,17 +63,17 @@ class WeekHandler:
         avg = total_week / 7
 
         text += f"\n━━━━━━━━━━━━━━━━\n"
-        text += f"🔢 Total this week: <b>{total_week}</b> habits\n"
-        text += f"📅 Active days: <b>{active_days}/7</b>\n"
-        text += f"📈 Daily average: <b>{avg:.1f}</b>\n"
+        text += s["week_footer_total"].format(total=total_week)
+        text += s["week_footer_active"].format(active=active_days)
+        text += s["week_footer_avg"].format(avg=f"{avg:.1f}")
 
         if active_days == 7:
-            text += "\n🔥 <b>Perfect week! Keep it up!</b>"
+            text += s["week_perfect"]
         elif active_days >= 5:
-            text += "\n💪 <b>Great consistency!</b>"
+            text += s["week_great"]
         elif active_days >= 3:
-            text += "\n👍 <b>Good progress, push for more!</b>"
+            text += s["week_good"]
         else:
-            text += "\n🌱 <b>Just getting started — you got this!</b>"
+            text += s["week_starting"]
 
         await message.answer(text, parse_mode="HTML")

@@ -1,5 +1,15 @@
 """
 handlers/remove.py  —  /remove command handler (class-based)
+
+Handles two kinds of removal:
+  • Custom habits  — permanently deleted from user_habits table
+  • Default habits — added to disabled_defaults table (hidden, not erased)
+Callback data prefixes:
+  remove_ask:<habit>            — show confirm screen for any habit
+  remove_confirm_custom:<h>     — delete a custom habit
+  remove_confirm_default:<h>    — disable a default habit
+  remove_back                   — back to full list
+  remove_cancel                 — cancel
 """
 
 from aiogram import Router, types, F
@@ -18,71 +28,105 @@ class RemoveHandler:
     def _register(self) -> None:
         self.router.message(Command("remove"))(self.remove_start)
         self.router.callback_query(F.data.startswith("remove_ask:"))(self.remove_ask)
-        self.router.callback_query(F.data.startswith("remove_confirm:"))(self.remove_confirm)
+        self.router.callback_query(F.data.startswith("remove_confirm_custom:"))(self.remove_confirm_custom)
+        self.router.callback_query(F.data.startswith("remove_confirm_default:"))(self.remove_confirm_default)
         self.router.callback_query(F.data == "remove_back")(self.remove_back)
         self.router.callback_query(F.data == "remove_cancel")(self.remove_cancel)
 
+    def _all_removable(self, user_id: int) -> tuple[list[str], list[str]]:
+        """Returns (active_defaults, custom_habits) as display names."""
+        return (
+            self._service.get_active_default_habits(user_id),
+            self._service.get_custom_habits(user_id),
+        )
+
     async def remove_start(self, message: types.Message) -> None:
-        habits = self._service.get_custom_habits(message.from_user.id)
-        if not habits:
-            await message.answer(
-                "📭 <b>No custom habits to delete.</b>\n\n"
-                "Default habits (Water, Exercise, Read) cannot be removed.\n"
-                "Use /add to create your own habits.",
-                parse_mode="HTML",
-            )
+        user_id = message.from_user.id
+        s = self._service.get_strings(user_id)
+        defaults, customs = self._all_removable(user_id)
+
+        if not defaults and not customs:
+            await message.answer(s["remove_nothing"], parse_mode="HTML")
             return
 
         await message.answer(
-            "🗑️ <b>Delete a habit</b>\n\n"
-            "Choose which habit to remove.\n"
-            "<i>Note: default habits cannot be deleted.</i>",
-            reply_markup=KeyboardBuilder.remove_list(habits),
+            s["remove_header"],
+            reply_markup=KeyboardBuilder.remove_list_full(defaults, customs, s),
             parse_mode="HTML",
         )
 
     async def remove_ask(self, callback: types.CallbackQuery) -> None:
+        user_id = callback.from_user.id
+        s = self._service.get_strings(user_id)
         habit = callback.data.split(":", 1)[1]
+        is_default = self._service.is_default_habit(habit, user_id)
+
+        note = s["remove_ask_default_note"] if is_default else s["remove_ask_custom_note"]
+        confirm_cb = (
+            f"remove_confirm_default:{habit}" if is_default
+            else f"remove_confirm_custom:{habit}"
+        )
+
         await callback.message.edit_text(
-            f"🗑️ Delete <b>{habit}</b>?\n\n"
-            f"This will remove it from your habit list.\n"
-            f"<i>Past completions won't be affected.</i>",
-            reply_markup=KeyboardBuilder.remove_confirm(habit),
+            s["remove_ask"].format(habit=habit, note=note),
+            reply_markup=KeyboardBuilder.remove_confirm_full(confirm_cb, s),
             parse_mode="HTML",
         )
         await callback.answer()
 
-    async def remove_confirm(self, callback: types.CallbackQuery) -> None:
-        habit = callback.data.split(":", 1)[1]
+    async def remove_confirm_custom(self, callback: types.CallbackQuery) -> None:
         user_id = callback.from_user.id
+        s = self._service.get_strings(user_id)
+        habit = callback.data.split(":", 1)[1]
 
         self._service.delete_habit(user_id, habit)
-        remaining = self._service.get_custom_habits(user_id)
-        await callback.answer(f"🗑️ '{habit}' deleted!")
+        await callback.answer(s["remove_confirm_answer"].format(habit=habit))
+        await self._show_remaining(callback, user_id, habit, s)
 
-        if not remaining:
+    async def remove_confirm_default(self, callback: types.CallbackQuery) -> None:
+        user_id = callback.from_user.id
+        s = self._service.get_strings(user_id)
+        habit = callback.data.split(":", 1)[1]
+
+        self._service.disable_default_habit(user_id, habit)
+        await callback.answer(s["remove_confirm_answer"].format(habit=habit))
+        await self._show_remaining(callback, user_id, habit, s)
+
+    async def _show_remaining(
+        self,
+        callback: types.CallbackQuery,
+        user_id: int,
+        deleted_habit: str,
+        s: dict,
+    ) -> None:
+        defaults, customs = self._all_removable(user_id)
+
+        if not defaults and not customs:
             await callback.message.edit_text(
-                f"✅ <b>{habit}</b> deleted.\n\n"
-                f"📭 No more custom habits. Use /add to create new ones!",
+                s["remove_done_empty"].format(habit=deleted_habit),
                 parse_mode="HTML",
             )
             return
 
         await callback.message.edit_text(
-            f"✅ <b>{habit}</b> deleted.\n\n🗑️ <b>Delete another?</b>",
-            reply_markup=KeyboardBuilder.remove_list(remaining),
+            s["remove_done_more"].format(habit=deleted_habit),
+            reply_markup=KeyboardBuilder.remove_list_full(defaults, customs, s),
             parse_mode="HTML",
         )
 
     async def remove_back(self, callback: types.CallbackQuery) -> None:
-        habits = self._service.get_custom_habits(callback.from_user.id)
+        user_id = callback.from_user.id
+        s = self._service.get_strings(user_id)
+        defaults, customs = self._all_removable(user_id)
+
         await callback.message.edit_text(
-            "🗑️ <b>Delete a habit</b>\n\nChoose which habit to remove.",
-            reply_markup=KeyboardBuilder.remove_list(habits),
+            s["remove_back_header"],
+            reply_markup=KeyboardBuilder.remove_list_full(defaults, customs, s),
             parse_mode="HTML",
         )
         await callback.answer()
 
     async def remove_cancel(self, callback: types.CallbackQuery) -> None:
-        await callback.message.edit_text("↩️ Cancelled. Your habits are safe!", parse_mode="HTML")
+        s = self._service.get_strings(callback.from_user.id)
+        await callback.message.edit_text(s["remove_cancelled"], parse_mode="HTML")
         await callback.answer()

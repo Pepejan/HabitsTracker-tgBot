@@ -1,6 +1,4 @@
-"""
-scheduler.py  —  Daily reminder scheduler
-"""
+"""scheduler.py  —  Daily reminder scheduler"""
 
 import random
 
@@ -9,14 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from aiogram import Bot
 
 from database import Database
-
-
-_REMINDERS = [
-    "☀️ <b>Good morning!</b>\n\nYour habits are waiting. Start strong and make today count! 💪",
-    "🌅 <b>Rise and shine!</b>\n\nA new day, a new chance to build great habits. Let's go! 🔥",
-    "👋 <b>Hey, it's habit time!</b>\n\nSmall actions every day add up to big results. Open /start and let's do this! 🚀",
-    "⏰ <b>Daily check-in!</b>\n\nDon't forget your habits today — your future self will thank you. 🌟",
-]
+from locales import get_strings
 
 
 class HabitScheduler:
@@ -40,8 +31,10 @@ class HabitScheduler:
 
     async def _send_reminders(self) -> None:
         user_ids = self._db.get_all_user_ids()
-        msg = random.choice(_REMINDERS)
         for user_id in user_ids:
+            lang = self._db.user_prefs.get_language(user_id)
+            s = get_strings(lang)
+            msg = random.choice(s["reminders"])
             try:
                 await self._bot.send_message(user_id, msg, parse_mode="HTML")
             except Exception as e:

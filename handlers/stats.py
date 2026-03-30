@@ -1,6 +1,4 @@
-"""
-handlers/stats.py  —  /stats command handler (class-based)
-"""
+"""handlers/stats.py  —  /stats command handler (class-based)"""
 
 from collections import defaultdict
 
@@ -20,20 +18,19 @@ class StatsHandler:
         self.router.message(Command("stats"))(self.stats)
 
     async def stats(self, message: types.Message) -> None:
-        rows = self._service.get_stats(message.from_user.id)
+        user_id = message.from_user.id
+        s = self._service.get_strings(user_id)
+        rows = self._service.get_stats(user_id)
 
         if not rows:
-            await message.answer(
-                "📭 <b>No stats yet!</b>\n\nStart by marking some habits with /start",
-                parse_mode="HTML",
-            )
+            await message.answer(s["stats_empty"], parse_mode="HTML")
             return
 
         by_day: dict[str, list[str]] = defaultdict(list)
         for day, habit in rows:
             by_day[day].append(habit)
 
-        text = "📋 <b>Recent Activity</b>\n\n"
+        text = s["stats_header"]
         for day in sorted(by_day.keys(), reverse=True)[:7]:
             text += f"📅 <b>{day}</b>\n"
             for h in by_day[day]:

@@ -1,6 +1,4 @@
-"""
-handlers/custom.py  —  /add and /myhabits handlers (class-based)
-"""
+"""handlers/custom.py  —  /add and /myhabits handlers (class-based)"""
 
 from aiogram import Router, types, F
 from aiogram.filters import Command
@@ -31,23 +29,17 @@ class CustomHabitHandler:
         )(self.emoji_chosen)
 
     async def add_habit_start(self, message: types.Message, state: FSMContext) -> None:
+        user_id = message.from_user.id
+        s = self._service.get_strings(user_id)
         text = message.text.replace("/add", "").strip()
+
         if not text:
-            await message.answer(
-                "➕ <b>Add a new habit</b>\n\n"
-                "Usage:\n"
-                "<code>/add Reading</code>\n"
-                "<code>/add Meditate</code>\n"
-                "<code>/add No sugar</code>",
-                parse_mode="HTML",
-            )
+            await message.answer(s["add_usage"], parse_mode="HTML")
             return
 
-        # ── Duplicate check (case-insensitive) ───────────────
-        if self._service.habit_exists(message.from_user.id, text):
+        if self._service.habit_exists(user_id, text):
             await message.answer(
-                f"🙈 Oh, you already have <b>{text}</b> in your habits!\n\n"
-                f"Use /myhabits to see your full list.",
+                s["add_duplicate"].format(habit=text),
                 parse_mode="HTML",
             )
             return
@@ -55,8 +47,8 @@ class CustomHabitHandler:
         await state.set_state(AddHabitStates.waiting_for_emoji)
         await state.update_data(habit_name=text)
         await message.answer(
-            f"✏️ New habit: <b>{text}</b>\n\nPick an emoji for it 👇",
-            reply_markup=KeyboardBuilder.emoji_picker(text),
+            s["add_pick_emoji"].format(habit=text),
+            reply_markup=KeyboardBuilder.emoji_picker(text, s),
             parse_mode="HTML",
         )
 
@@ -64,40 +56,40 @@ class CustomHabitHandler:
         await callback.answer()
 
     async def emoji_chosen(self, callback: types.CallbackQuery, state: FSMContext) -> None:
+        user_id = callback.from_user.id
+        s = self._service.get_strings(user_id)
+
         emoji = callback.data.split(":")[1]
         data = await state.get_data()
         habit_name = data.get("habit_name", "")
         full_habit = f"{emoji} {habit_name}"
 
-        # ── Second guard: catches parallel sessions / two devices ─
-        if self._service.habit_exists(callback.from_user.id, habit_name):
+        if self._service.habit_exists(user_id, habit_name):
             await state.clear()
             await callback.message.edit_text(
-                f"🙈 Looks like <b>{habit_name}</b> already exists in your habits!\n\n"
-                f"Use /myhabits to see your full list.",
+                s["add_already_exists"].format(habit=habit_name),
                 parse_mode="HTML",
             )
             await callback.answer()
             return
 
-        self._service.create_habit(callback.from_user.id, full_habit)
+        self._service.create_habit(user_id, full_habit)
         await state.clear()
         await callback.message.edit_text(
-            f"{emoji} <b>'{habit_name}'</b> added to your habits!\n\n"
-            f"Use /start to see your updated list.",
+            s["add_success"].format(emoji=emoji, habit=habit_name),
             parse_mode="HTML",
         )
-        await callback.answer("Habit added! 🎉")
+        await callback.answer(s["add_callback_answer"])
 
     async def my_habits(self, message: types.Message) -> None:
-        habits = self._service.get_all_habits(message.from_user.id)
+        user_id = message.from_user.id
+        s = self._service.get_strings(user_id)
+        habits = self._service.get_all_habits(user_id)
+
         if not habits:
-            await message.answer(
-                "📭 You have no custom habits yet.\n\nUse /add to create one!",
-                parse_mode="HTML",
-            )
+            await message.answer(s["myhabits_empty"], parse_mode="HTML")
             return
 
-        text = "📋 <b>Your Habits</b>\n\n" + "\n".join(habits)
-        text += f"\n\n<i>Total: {len(habits)} habits</i>"
+        text = s["myhabits_header"] + "\n".join(habits)
+        text += s["myhabits_total"].format(count=len(habits))
         await message.answer(text, parse_mode="HTML")

@@ -21,10 +21,12 @@ from handlers.stats import StatsHandler
 from handlers.custom import CustomHabitHandler
 from handlers.week import WeekHandler
 from handlers.remove import RemoveHandler
+from handlers.restore import RestoreHandler
 from handlers.help import HelpHandler
-
+from handlers.language import LanguageHandler
 from handlers.export import ExportHandler
 from handlers.import_handler import ImportHandler
+
 
 async def main() -> None:
     Config.validate()
@@ -43,7 +45,9 @@ async def main() -> None:
         CustomHabitHandler(service),
         WeekHandler(service),
         RemoveHandler(service),
-        HelpHandler(),
+        RestoreHandler(service),
+        HelpHandler(service),        # now takes service for i18n
+        LanguageHandler(service),    # new
         ExportHandler(service),
         ImportHandler(service),
     ]
